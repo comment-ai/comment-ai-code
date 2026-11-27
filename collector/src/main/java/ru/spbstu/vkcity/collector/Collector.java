@@ -100,4 +100,30 @@ class Collector {
         }
         LOG.info("{}: итого постов {}, комментариев {}", name, posts, comments);
     }
+
+    private int collectComments(long groupId, String name, long postId) throws IOException {
+        long ownerId = -groupId;
+        int n = 0, offset = 0;
+        while (true) {
+            JsonNode items = call("wall.getComments", Map.of(
+                    "owner_id", ownerId, "post_id", postId,
+                    "count", PAGE, "offset", offset, "sort", "asc",
+                    "need_likes", 1, "thread_items_count", THREAD_PREVIEW)).path("items");
+            if (!items.isArray() || items.isEmpty()) break;
+
+            for (JsonNode node : items) {
+                ObjectNode c = (ObjectNode) node;
+                JsonNode thread = c.path("thread");
+                if (thread.isObject() && thread.path("count").asInt(0) > thread.path("items").size()) {
+                    ((ObjectNode) thread).set("items", fetchThread(ownerId, postId, c.path("id").asLong()));
+                }
+                stamp(c, groupId, name);
+                sink.comment(c);
+                n += 1 + c.path("thread").path("items").size();
+            }
+            if (items.size() < PAGE) break;
+            offset += PAGE;
+        }
+        return n;
+    }
 }
