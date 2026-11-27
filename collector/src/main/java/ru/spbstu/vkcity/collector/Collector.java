@@ -126,4 +126,34 @@ class Collector {
         }
         return n;
     }
+
+    private ArrayNode fetchThread(long ownerId, long postId, long commentId) {
+        ArrayNode all = MAPPER.createArrayNode();
+        int offset = 0;
+        while (true) {
+            JsonNode items = call("wall.getComments", Map.of(
+                    "owner_id", ownerId, "post_id", postId, "comment_id", commentId,
+                    "count", PAGE, "offset", offset, "sort", "asc", "need_likes", 1)).path("items");
+            if (!items.isArray() || items.isEmpty()) break;
+            all.addAll((ArrayNode) items);
+            if (items.size() < PAGE) break;
+            offset += PAGE;
+        }
+        return all;
+    }
+
+    private static void stamp(ObjectNode node, long groupId, String screenName) {
+        node.put("_group_id", groupId);
+        node.put("_screen_name", screenName);
+        node.put("_collected_at", Instant.now().toString());
+    }
+
+    private JsonNode call(String method, Map<String, Object> params) {
+        try {
+            return client.call(method, params);
+        } catch (VkApiClient.VkApiException e) {
+            LOG.warn("{} {}: {}", method, params, e.getMessage());
+            return MAPPER.createObjectNode();
+        }
+    }
 }
